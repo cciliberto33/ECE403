@@ -1,0 +1,67 @@
+#include <Wire.h>
+#include <Adafruit_MCP4725.h>
+
+
+Adafruit_MCP4725 dac;
+
+int sensepin = A5;
+double areadx = 0;
+double areadx1 = 0;
+double areadx2 = 0;
+int output = 0;
+int set = 0;
+int y = 0;
+int trigPin = 2;
+const double pi = 3.1415923626;
+double timerperiod = 0.1;
+
+void setup(void) {
+  pinMode(trigPin, INPUT);
+  pinMode(sensepin, INPUT);
+  dac.begin(0x62);
+  Wire.setClock(400000);
+  //attachInterrupt(digitalPinToInterrupt(trigPin), readisr, RISING);
+  
+//   Set no interrupts
+  cli();
+
+  // Set timer2 for 8 kHz
+  TCCR2A = 0;// set entire TCCR2A register to 0
+  TCCR2B = 0;// same for TCCR2B
+  TCNT2  = 0;//initialize counter value to 0
+  // set compare match register for 8khz increments
+  OCR2A = 249;// = (16*10^6) / (8000*8) - 1 (must be <256)
+  // turn on CTC mode
+  TCCR2A |= (1 << WGM21);
+  // Set CS21 bit for 8 prescaler
+  TCCR2B |= (1 << CS21);
+  // enable timer compare interrupt
+  TIMSK2 |= (1 << OCIE2A);
+  sei();
+//  Serial.begin(9600);
+}
+
+void loop(void) {
+  if (set){
+    areadx2 = areadx1;
+    areadx1 = areadx;
+    areadx = analogRead(sensepin) - 512;
+    y = nullingFilter(60, areadx, areadx1, areadx2);
+    y = (y+512)*4;
+    dac.setVoltage(y, false);
+    set = 0;
+  }
+}
+
+int nullingFilter(int freq, int x0, int x1, int x2)
+{
+  int output = 0;
+  int w = TWO_PI * freq / 8000;
+  output = round(x0 + x2 - 2*cos(w)*x1);
+  //output = abs(output);
+  return output;
+}
+
+ISR(TIMER2_COMPA_vect){
+  set = 1;
+}
